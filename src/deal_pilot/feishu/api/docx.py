@@ -1,5 +1,10 @@
-"""新版文档（Docx）读取接口规格，所有方法均未实现。"""
+"""应用身份的新版文档元信息及原始块读取。"""
 
+from lark_oapi.api.docx.v1 import GetDocumentRequest, ListDocumentBlockRequest
+from pydantic import JsonValue
+
+from deal_pilot.feishu.api._client import docx_client, iter_items, object_value, resource_id, sdk_call
+from deal_pilot.feishu.api.errors import FeishuAPIError
 from deal_pilot.feishu.api.models import DocxBlock, DocxDocument
 
 
@@ -17,7 +22,16 @@ class DocxAPI:
             文档 ID、标题和版本号；明确不存在时返回 None。
             无权限、认证失败或服务错误应抛出异常。
         """
-        raise NotImplementedError("DocxAPI.get_document 尚未实现")
+        document_id = resource_id(document_id, "document_id")
+        api = docx_client()
+        request = GetDocumentRequest.builder().document_id(document_id).build()
+        try:
+            data = await sdk_call(lambda: api.document.get(request))
+        except FeishuAPIError as error:
+            if error.code in {1770002, 1770003} and error.http_status in {200, 400, 404}:
+                return None
+            raise
+        return DocxDocument.model_validate(object_value(data.get("document"), "document"))
 
     async def list_blocks(
         self,
@@ -37,4 +51,22 @@ class DocxAPI:
             无块时返回空列表；可根据 parent_id、children 在上层组装树。
             任一页读取失败、文档不存在或无权限时应抛出异常，不返回部分列表。
         """
-        raise NotImplementedError("DocxAPI.list_blocks 尚未实现")
+        document_id = resource_id(document_id, "document_id")
+        if type(document_revision_id) is not int or (document_revision_id != -1 and document_revision_id <= 0):
+            raise ValueError("document_revision_id 必须为 -1 或正整数")
+        api = docx_client()
+
+        async def fetch_page(page_token: str | None) -> dict[str, JsonValue]:
+            builder = (ListDocumentBlockRequest.builder().document_id(document_id)
+                       .document_revision_id(document_revision_id).page_size(500))
+            if page_token is not None:
+                builder.page_token(page_token)
+            request = builder.build()
+            return await sdk_call(lambda: api.document_block.list(request))
+
+        return [DocxBlock.model_validate({
+            **item,
+            "parent_id": item.get("parent_id") or None,
+            "children": item.get("children") or [],
+            "raw": item,
+        }) async for item in iter_items(fetch_page)]
