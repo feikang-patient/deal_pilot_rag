@@ -35,7 +35,8 @@
 | `src/deal_pilot/benchmarks` | 数据集与实验；`evaluators` 子目录负责评分 |
 | `src/deal_pilot/graphs` | 手工构建的普通 LangGraph 图及其入口 |
 | `src/deal_pilot/feishu` | 官方 SDK 接入、知识空间/节点/Docx 读取、分页与错误处理；Token 由 SDK 管理 |
-| `tests/units` | 函数缓存单元测试及飞书 Mock 单元测试 |
+| `src/deal_pilot/rag/structure/feishu_doc` | 异步构树、原始关系校验、标题归组、内容及元数据提取；完整树构建后并发调用图片处理函数（当前为占位），尚未接入切分、索引或检索 |
+| `tests/units` | 函数缓存、飞书 Mock 及文档构树单元测试 |
 | `tests/intergrations` | MinIO 与 Deploy 集成测试，保留现有目录拼写 |
 | `tests/benchmarks` | 依赖真实 Agent 和 Langfuse 的质量回归 |
 | `docker/sandbox/Dockerfile` | 沙箱镜像，包含部署所需的上传工具 |
@@ -52,7 +53,7 @@
 | `make dev` | 启动 LangGraph 开发服务，端口 80；按配置依赖外部服务 |
 | `make debug` | 开发服务另开调试端口 5678 |
 | `make build TAG=<镜像标签>` | 构建 Agent 服务镜像 |
-| `make test-units` | 本地缓存与飞书 Mock 单元测试，无需启动外部服务 |
+| `make test-units` | 本地缓存、飞书 Mock 及文档构树单元测试，无需启动外部服务 |
 | `MINIO_INTEGRATION=1 uv run pytest -q tests/intergrations/test_minio.py` | 仅验证真实 MinIO，使用随机测试桶 |
 | `MINIO_INTEGRATION=1 DEPLOY_INTEGRATION=1 DEPLOY_SANDBOX_IMAGE=<已准备的镜像> uv run pytest -q tests/intergrations/test_deploy.py` | 真实 MinIO 与 OpenSandbox 部署验证 |
 | `make test-integrations` | 当前 Makefile 同时启用 MinIO 和 Deploy，并固定镜像为 `opensandbox-python-node:1.0` |
