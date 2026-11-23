@@ -10,6 +10,7 @@ import httpx
 import pytest
 from aiobotocore.config import AioConfig
 from aiobotocore.session import get_session
+from botocore.handlers import add_expect_header
 
 from deal_pilot.config.minio_settings import minio_settings
 from deal_pilot.config.sandbox_settings import sandbox_settings
@@ -101,6 +102,9 @@ class MinioEnvironment:
                 retries={"max_attempts": 0},
             ),
         ) as raw, httpx.AsyncClient(timeout=15, trust_env=False) as http:
+            # 与 MinIO 客户端保持一致：部分 MinIO 版本不处理 100-continue，
+            # 保留该头时 PUT 会长时间等待或返回 RequestTimeout。
+            raw.meta.events.unregister("before-call.s3", add_expect_header)
             env = LiveMinio(self.config, raw, http)
             try:
                 yield env

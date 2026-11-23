@@ -47,3 +47,8 @@ class DocxBlock(BaseModel):
     raw: dict[str, JsonValue] = Field(description="完整的原始块 JSON，保留富文本及未知字段")
 
 
+class ImageData(BaseModel):
+    """下载完成的图片素材，供后续私有存储或模型解析使用。"""
+
+    mime: str = Field(min_length=1, description="图片 MIME 类型，例如 image/png、image/jpeg")
+    data: bytes = Field(description="图片原始字节数据")

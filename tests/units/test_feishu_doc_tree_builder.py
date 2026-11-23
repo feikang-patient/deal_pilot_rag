@@ -464,7 +464,7 @@ def test_image_root_is_processed_in_place(mock_image_parser: AsyncMock) -> None:
     assert root.payload == {"processed": True}
 
 
-def test_all_images_run_concurrently_after_complete_tree_is_built(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_images_run_serially_in_document_order(monkeypatch: pytest.MonkeyPatch) -> None:
     sources = [
         block("doc", children=["heading", "image-a", "table", "image-c", "tail"], block_type=1),
         block("heading", "doc", block_type=3),
@@ -478,11 +478,11 @@ def test_all_images_run_concurrently_after_complete_tree_is_built(monkeypatch: p
     before = [source.model_dump() for source in sources]
 
     async def scenario() -> None:
-        started: dict[str, BlockNode] = {}
-        finished: set[str] = set()
-        all_started = asyncio.Event()
+        processed: dict[str, BlockNode] = {}
+        processing = False
 
         async def parse(node: BlockNode) -> None:
+            nonlocal processing
             root = node
             while root.parent is not None:
                 root = root.parent
@@ -491,24 +491,31 @@ def test_all_images_run_concurrently_after_complete_tree_is_built(monkeypatch: p
             assert [child.block_id for child in root.children[0].children] == [
                 "image-a", "table", "image-c", "tail",
             ]
-            assert node.block_id not in started
-            started[node.block_id] = node
-            if len(started) == 3:
-                all_started.set()
-            # 串行实现会停在这里；所有图片都开始处理后才允许任意一次结束。
-            await all_started.wait()
+            # 串行处理：上一张图片处理完成前不会开始下一张。
+            assert processing is False
+            processing = True
+            if node.block_id == "image-b":
+                assert list(processed) == ["image-a"]
+                assert processed["image-a"].content == "processed-image-a"
+                assert processed["image-a"].payload["processed"] is True
+            if node.block_id == "image-c":
+                assert list(processed) == ["image-a", "image-b"]
+                assert processed["image-b"].content == "processed-image-b"
             token = node.content
             node.content = f"processed-{node.block_id}"
             node.payload.update({"token": token, "processed": True})
-            finished.add(node.block_id)
+            # 让出事件循环；并发实现会在这里开始处理下一张图片。
+            await asyncio.sleep(0)
+            processed[node.block_id] = node
+            processing = False
 
         monkeypatch.setattr(image_parser, "parse_image_block", parse)
         root = await asyncio.wait_for(build_tree(sources), timeout=2)
-        assert set(started) == finished == {"image-a", "image-b", "image-c"}
+        assert list(processed) == ["image-a", "image-b", "image-c"]
         heading = root.children[0]
         images = [heading.children[0], heading.children[1].children[0].children[0], heading.children[2]]
         for node in images:
-            assert node is started[node.block_id]
+            assert node is processed[node.block_id]
             assert node.content == f"processed-{node.block_id}"
             assert node.payload == {"token": f"token-{node.block_id[-1]}", "processed": True}
         assert_links(root, len(sources))

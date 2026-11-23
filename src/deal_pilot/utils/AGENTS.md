@@ -41,8 +41,10 @@
 
 - `minio.py` 只依赖 aiobotocore 和标准库，Dockerfile 会将它复制成独立模块；不要添加 `deal_pilot` 包内依赖。
 - 每次操作创建和关闭独立客户端，不保存跨事件循环连接。除 `create_bucket` 外不隐式建桶或修改权限。
+- `_client()` 建立连接后移除 botocore 自动添加的 `Expect: 100-continue`。部分 MinIO/代理组合不返回 100 Continue，未移除时 PUT 会一直等待；该头可选，移除不改变请求内容或签名。并发上传仍可能收到 MinIO 服务端的 `RequestTimeout ... lock a resource`，那是服务端锁超时，不是该头处理造成的。
 - 对象键移除前导 `/`，不解析 `..` 或合并中间斜线；S3 对象键与本地文件路径不同，不能直接套用 Deploy 的路径限制。
 - `upload_dir` 保留相对路径，跳过符号链接及非普通文件，扫描完成才开始上传，单文件错误汇总并继续；不删除额外远程对象，已上传内容不回滚。
+- `upload_bytes` 直接上传调用方提供的 bytes，Content-Type 使用传入的 mime，不按后缀或 content_type_strategy 推断；缓存策略仍按目标对象键匹配。data 必须是 bytes，允许空 bytes。
 - `UploadDirResult.failures` 使用相对源目录的路径；保持 `total_count=success_count+failure_count` 和 `failure_count=len(failures)`。Deploy 再将失败路径转换为沙箱绝对路径。
 - 缓存及 Content-Type 策略按目标对象键匹配，只影响新上传。永久 URL 不代表私有对象可匿名读取；预签名 URL 不预检查对象存在或改变桶权限。
 - 桶强制删除必须处理对象版本和删除标记；不要通过忽略服务端错误把清理报告为成功。
@@ -51,4 +53,4 @@
 
 - Webhook 签名使用原始 body 和时间戳的 HMAC-SHA256，constant-time 比较；缺密钥或格式错误拒绝。当前没有时间戳新鲜度或防重放检查。
 - trace 清理的保留期、批次上限和提交计数见 `graphs/AGENTS.md`，调用是真实删除请求，不作为普通读检查。
-- 缓存修改运行 `make test-units`；MinIO 修改运行 `test_minio.py` 对应集成测试，同时检查沙箱镜像是否需重建。现有集成测试未覆盖所有模型、追踪或沙箱行为，按改动补充有意义的验证。
+- 缓存修改运行 `make test-units`；MinIO 修改运行 `test_minio.py` 对应集成测试，同时检查沙箱镜像是否需重建。`upload_bytes` 的请求参数另由 `tests/units/test_minio_client.py` 验证，不连接真实 MinIO。现有集成测试未覆盖所有模型、追踪或沙箱行为，按改动补充有意义的验证。

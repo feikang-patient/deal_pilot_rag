@@ -10,6 +10,8 @@ import os
 import re
 import stat
 import tempfile
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import PurePosixPath
@@ -19,6 +21,7 @@ from urllib.parse import quote, urlsplit
 from aiobotocore.config import AioConfig
 from aiobotocore.session import get_session
 from botocore.exceptions import ClientError
+from botocore.handlers import add_expect_header
 
 # 默认缓存时间为 90 天，单位为秒。
 _DEFAULT_MAX_AGE = 7776000
@@ -240,16 +243,22 @@ class MinIO:
         self._access_key = access_key
         self._secret_key = secret_key
 
-    def _client(self) -> Any:
+    @asynccontextmanager
+    async def _client(self) -> AsyncIterator[Any]:
         # botocore 是 aiobotocore 自带的依赖，不引入额外的 SDK。
-        return get_session().create_client(
+        async with get_session().create_client(
             "s3",
             endpoint_url=self._endpoint_url,
             aws_access_key_id=self._access_key,
             aws_secret_access_key=self._secret_key,
             region_name="us-east-1",
             config=AioConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
-        )
+        ) as client:
+            # 部分 MinIO/代理组合不返回 100 Continue，aiobotocore 会一直等待
+            # PUT 响应。Expect 是可选头，移除后客户端直接发送请求体，
+            # 不改变请求内容和签名。
+            client.meta.events.unregister("before-call.s3", add_expect_header)
+            yield client
 
     def _metadata(self, filename: str) -> dict[str, str]:
         extension = PurePosixPath(filename.rsplit("/", 1)[-1]).suffix.lower()
@@ -435,6 +444,32 @@ class MinIO:
                 await client.put_object(
                     Bucket=bucket_name, Key=filename, Body=body, **self._metadata(filename),
                 )
+
+    async def upload_bytes(
+        self,
+        *,
+        bucket_name: str,
+        filename: str,
+        data: bytes,
+        mime: str,
+    ) -> None:
+        """直接上传内存中的字节数据；覆盖和缓存约定与 upload_file 相同。
+
+        data 必须是 bytes，允许为空字节；不读取本地文件、不改动调用方数据。
+        Content-Type 使用传入的 mime，不按 filename 后缀或 content_type_strategy
+        推断；缓存策略仍按目标 filename 匹配。
+        """
+        bucket_name, filename = _bucket(bucket_name), _key(filename)
+        if not isinstance(data, bytes):
+            raise ValueError("data 必须是 bytes")
+        mime = _content_type(mime)
+        async with self._client() as client:
+            await client.put_object(
+                Bucket=bucket_name,
+                Key=filename,
+                Body=data,
+                **{**self._metadata(filename), "ContentType": mime},
+            )
 
     @staticmethod
     def _local_path(value: str) -> str:

@@ -12,7 +12,7 @@ from lark_oapi.core.cache import LocalCache
 from lark_oapi.core.token import TokenManager
 from pydantic import ValidationError
 
-from deal_pilot.feishu.api import DocxAPI, WikiAPI
+from deal_pilot.feishu.api import DocxAPI, MediaAPI, WikiAPI
 from deal_pilot.feishu.api import _client
 from deal_pilot.feishu.api.errors import (
     FeishuAPIError,
@@ -593,3 +593,55 @@ def test_missing_document_blocks_raises_instead_of_empty_list(mock_feishu):
     with pytest.raises(FeishuAPIError) as error:
         asyncio.run(DocxAPI().list_blocks("missing"))
     assert error.value.code == 1770002
+
+
+def test_download_image_returns_normalized_mime_and_bytes(mock_feishu):
+    payload = b"\x89PNG\r\n\x1a\n"
+
+    def handler(request):
+        assert request.url.path == "/open-apis/drive/v1/medias/img-token/download"
+        return httpx.Response(
+            200, content=payload, headers={"Content-Type": "IMAGE/PNG; charset=binary"}
+        )
+
+    requests, threads = mock_feishu(handler)
+    image = asyncio.run(MediaAPI().download_image("img-token"))
+    assert image.mime == "image/png"
+    assert image.data == payload
+    assert sum(r.method == "POST" for r in requests) == 1
+    assert all(t != threading.get_ident() for t in threads)
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [{}, {"Content-Type": "application/octet-stream"}],
+)
+def test_download_image_rejects_missing_or_non_image_content_type(mock_feishu, headers):
+    mock_feishu(
+        lambda _: httpx.Response(200, content=b"not-an-image", headers=headers)
+    )
+    with pytest.raises(FeishuResponseError):
+        asyncio.run(MediaAPI().download_image("img-token"))
+
+
+def test_download_image_business_error_is_not_success(mock_feishu):
+    def handler(_):
+        # 直接构造 requests 响应，保留服务端头的大小写；SDK 仅在
+        # Content-Type 名称大小写匹配时把错误体反序列化为业务错误。
+        response = requests_lib.Response()
+        response.status_code = 400
+        response.headers["Content-Type"] = "application/json"
+        response._content = b'{"code": 1061004}'
+        return response
+
+    mock_feishu(handler)
+    with pytest.raises(FeishuAPIError) as error:
+        asyncio.run(MediaAPI().download_image("img-token"))
+    assert error.value.code == 1061004
+    assert error.value.http_status == 400
+
+
+@pytest.mark.parametrize("token", ["", "  ", "a/b", "https://example.com/x"])
+def test_download_image_validates_token_before_network(token):
+    with pytest.raises(ValueError):
+        asyncio.run(MediaAPI().download_image(token))
