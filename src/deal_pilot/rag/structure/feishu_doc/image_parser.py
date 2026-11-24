@@ -202,5 +202,8 @@ nexts:
         }
     )
 
-    image_block.payload = {"token": image_block.content}
-    image_block.content = f"图片token: {image_block.content}"
+    image_block.content = result["messages"][-1].text
+    image_block.payload = {
+        "bucket_name": minio_result.bucket_name,
+        "bucket_filename": minio_result.filename,
+    }
