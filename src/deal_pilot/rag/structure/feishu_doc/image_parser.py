@@ -13,6 +13,12 @@ from deal_pilot.rag.structure.feishu_doc.block_node import BlockNode
 from deal_pilot.rag.structure.feishu_doc.block_type import BlockType
 from deal_pilot.utils.minio import MinIO
 
+from langchain.agents import create_agent
+from deal_pilot.utils.create_model import create_model
+from deal_pilot.config.nacos.nacos_prompt import get_prompt
+from langchain.messages import HumanMessage
+from deal_pilot.feishu.api import MediaAPI
+
 # 文档图片常见 MIME 到对象键后缀的固定映射；不依赖操作系统的 MIME 配置，
 # 避免同一 MIME 在不同环境生成不同文件名。未列出的 MIME 直接报错。
 _MIME_EXTENSIONS: dict[str, str] = {
@@ -158,5 +164,43 @@ async def _attachment_info(image_block: BlockNode) -> AttachmentInfo:
 
 
 async def parse_image_block(image_block: BlockNode) -> None:
+
+    rag_config = await get_config("rag_config", RagConfig)
+    model = create_model(rag_config.image_parser.vl_model_config)
+    system_prompt = await get_prompt(rag_config.image_parser.image_parser_prompt)
+    agent = create_agent(model=model, system_prompt=system_prompt)
+    attachment = await _attachment_info(image_block)
+    attachment.parent_trace
+    parent_trace = "/".join(attachment.parent_trace)
+    prevs = "\n\n".join(attachment.prevs)
+    nexts = "\n\n".join(attachment.nexts)
+    text_content = f"""
+parent_trace:
+{parent_trace}
+
+prevs:
+{prevs}
+
+nexts:
+{nexts}
+"""
+    img_api = MediaAPI()
+    img = await img_api.download_image(image_block.content)
+    minio_result = await _upload_minio(img.data, img.mime, image_block.block_id)
+    dataurl = _generate_dataurl(img.data, img.mime)
+
+    result = await agent.ainvoke(
+        {
+            "messages": [
+                HumanMessage(
+                    [
+                        {"type": "text", "text": text_content},
+                        {"type": "image_url", "image_url": {"url": dataurl}},
+                    ]
+                )
+            ]
+        }
+    )
+
     image_block.payload = {"token": image_block.content}
     image_block.content = f"图片token: {image_block.content}"
