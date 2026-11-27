@@ -36,5 +36,14 @@ class FeishuHTTPError(RuntimeError):
         super().__init__(f"飞书 HTTP 调用失败：HTTP={http_status}")
 
 
+class FeishuImportError(RuntimeError):
+    """导入或移动任务失败；保留任务状态码，不输出原始响应内容。"""
+
+    def __init__(self, status: int, message: str) -> None:
+        self.status = status
+        detail = f"，{message}" if message else ""
+        super().__init__(f"飞书导入/移动任务失败：status={status}{detail}")
+
+
 class UnsupportedWikiNodeTypeError(RuntimeError):
     """当前只支持 docx，不能将其他类型节点伪装成新版文档。"""

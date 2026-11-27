@@ -17,7 +17,7 @@
 - Langfuse 用于追踪、离线评测和 Webhook；OpenSandbox 提供用户执行环境；MinIO 用于产物存储与交付；模型通过 OpenAI 兼容接口及自定义模型适配层调用。
 - 当前 RAG 模块提供飞书标准树构建、到 Documents 的本地结构提取及进一步切片；尚未实现向量索引或检索，不要仅凭目录名推断这些能力已经实现。
 - 本地 Compose 提供 Milvus Standalone `v3.0.2`，使用专用 `milvus-etcd`、`milvus-minio` 与三个 `milvus_standalone_*` 命名卷，不复用 Shared MinIO 或已有旧 Milvus 卷。课件通过 PyMilvus 连接，不依赖 Milvus Lite；这不表示 RAG 源码已经接入向量数据库。
-- `feishu/api` 通过官方 `lark-oapi` SDK 实现应用身份的知识库目录、Docx 只读调用与图片下载；尚未接入 Agent 或 RAG 流程，本地 Mock 测试不代表真实租户验证。
+- `feishu/api` 通过官方 `lark-oapi` SDK 实现应用身份的知识库目录、Docx 只读调用、图片下载，以及把本地 Markdown 导入为 Docx、插入图片并移动进知识空间的发布接口；发布与清理目前只由一次性脚本 `scripts/import_feishu_kb.py`、`scripts/feishu_cleanup.py` 调用，尚未接入 Agent 或 RAG 流程。本地 Mock 测试不代表真实租户验证，真实导入还要求应用是目标知识空间成员。
 - 鉴权当前使用 `utils/mock_user.py` 中的模拟用户；告警 Webhook 已验签并接收事件，尚未实现短信或邮件通知。
 - `graphs` 保存手工构建的普通 LangGraph 图，不存放通过 LangChain 或 Deep Agents 创建的 Agent 图；当前包含可调度的清理图。调度计划由外部服务管理，代码中没有自动注册定时计划的逻辑。
 
@@ -35,11 +35,11 @@
 | `src/deal_pilot/utils` | 模型、追踪、缓存、存储、沙箱等公共能力 |
 | `src/deal_pilot/benchmarks` | 数据集与实验；`evaluators` 子目录负责评分 |
 | `src/deal_pilot/graphs` | 手工构建的普通 LangGraph 图及其入口 |
-| `src/deal_pilot/feishu` | 官方 SDK 接入、知识空间/节点/Docx 读取、图片下载、分页与错误处理；Token 由 SDK 管理 |
+| `src/deal_pilot/feishu` | 官方 SDK 接入、知识空间/节点/Docx 读取、图片下载、Markdown 导入与知识库挂载（脚本调用）、分页与错误处理；Token 由 SDK 管理 |
 | `src/deal_pilot/rag/structure/feishu_doc` | 异步构树、原始关系校验、标题归组、内容及元数据提取；完整树构建后按文档顺序串行调用图片处理占位函数；提供 Data URL、私有图片上传及上下文辅助函数，尚未接入模型识图、切分、索引或检索 |
 | `src/deal_pilot/rag/loader/feishu_doc` | 标准树到 LangChain Documents 的本地结构提取；父子占位引用、Markdown 正文、HTML 表格与合并校验，不按长度切片 |
 | `src/deal_pilot/rag/splitter/feishu_doc` | 结构 Documents 的本地进一步切片；图片/代码整体保留，表格首行表头加单行，页面/章节按段落、句子和长度切分，保护占位符并保留目标 overlap |
-| `tests/units` | 函数缓存、飞书 Mock、文档构树、Documents 结构提取及进一步切片单元测试 |
+| `tests/units` | 函数缓存、飞书 Mock、Markdown 导入 Mock、文档构树、Documents 结构提取及进一步切片单元测试 |
 | `tests/intergrations` | MinIO 与 Deploy 集成测试，保留现有目录拼写 |
 | `tests/benchmarks` | 依赖真实 Agent 和 Langfuse 的质量回归 |
 | `docker/sandbox/Dockerfile` | 沙箱镜像，包含部署所需的上传工具 |
@@ -57,7 +57,7 @@
 | `make debug` | 开发服务另开调试端口 5678 |
 | `docker compose up -d --wait milvus` | 仅启动 Milvus Standalone 及其专用 etcd、MinIO，并等待健康检查 |
 | `make build TAG=<镜像标签>` | 构建 Agent 服务镜像 |
-| `make test-units` | 本地缓存、飞书 Mock、文档构树、Documents 结构提取及进一步切片单元测试，无需启动外部服务 |
+| `make test-units` | 本地缓存、飞书 Mock、Markdown 导入 Mock、文档构树、Documents 结构提取及进一步切片单元测试，无需启动外部服务 |
 | `MINIO_INTEGRATION=1 uv run pytest -q tests/intergrations/test_minio.py` | 仅验证真实 MinIO，使用随机测试桶 |
 | `MINIO_INTEGRATION=1 DEPLOY_INTEGRATION=1 DEPLOY_SANDBOX_IMAGE=<已准备的镜像> uv run pytest -q tests/intergrations/test_deploy.py` | 真实 MinIO 与 OpenSandbox 部署验证 |
 | `make test-integrations` | 当前 Makefile 同时启用 MinIO 和 Deploy，并固定镜像为 `opensandbox-python-node:1.0` |
