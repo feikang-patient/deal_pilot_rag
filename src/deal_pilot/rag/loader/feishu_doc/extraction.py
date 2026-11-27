@@ -14,7 +14,7 @@ from deal_pilot.rag.structure.feishu_doc.block_type import BlockType
 
 _INTERNAL_FIELDS = frozenset({
     "block_id", "block_type", "kind", "payload", "order",
-    "parent_document_id", "title_path", "references",
+    "parent_block_id", "title_path", "references",
 })
 _KINDS: dict[int, str] = {
     BlockType.PAGE: "page", BlockType.IMAGE: "image",
@@ -87,7 +87,7 @@ def extract_documents(
                 "kind": kind,
                 "payload": deepcopy(node.payload),
                 "order": len(documents),
-                "parent_document_id": owner.id if owner is not None else None,
+                "parent_block_id": owner.id if owner is not None else None,
                 "title_path": list(frame.title_path),
                 "references": [],
             })

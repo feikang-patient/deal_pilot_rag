@@ -24,10 +24,14 @@
 
 ## 读取契约
 
-- list_spaces 返回所有可访问空间；list_nodes 返回全部直接子节点，不递归；分页大小均为 50。
-  parent_node_token=None 表示空间根目录，不接受空 token。
-- list_all_space_nodes 按空间和目录广度遍历，返回扁平列表；按 `(space_id, node_token)` 去重，
-  指向相同 obj_token 的不同节点仍保留；不读取正文，不保证跨请求的数据快照一致。
+- list_spaces 返回所有可访问空间的列表；内部由 `_iter_spaces` 按页异步产出，公开方法聚合为列表。
+  list_nodes 返回全部直接子节点的列表；内部由 `_iter_nodes` 按页异步产出，不递归。
+  parent_node_token=None 表示空间根目录，不接受空 token；分页大小均为 50。
+- list_all_space_nodes 返回 `AsyncIterator[WikiNode]`，调用方必须用 `async for` 消费，不能再 `await` 成列表。
+  开始迭代才发起请求，空间与目录分页均按需读取，不预取下一页；按空间和目录广度优先顺序产出。
+  按 `(space_id, node_token)` 去重，指向相同 obj_token 的不同节点仍保留；不读取正文，不保证跨请求的数据快照一致。
+- 迭代过程中任一后续请求失败会向消费方抛出异常；已产出的节点不会撤回，因此异步迭代不承诺“要么完整、要么无结果”。
+  列表型方法（list_spaces、list_nodes、list_blocks）仍是全量成功才返回。
 - WikiNode.obj_type 仍为 Literal["docx"]；其他类型抛出 UnsupportedWikiNodeTypeError，
   不转换、不静默过滤；混合类型空间的全量遍历会失败。
 - 节点 URL 按 `https://www.feishu.cn/wiki/{node_token}` 生成，不使用 obj_token 或服务返回 URL；
@@ -91,7 +95,8 @@
 - SDK JSON/模型反序列化失败，以及缺失状态、code、data、分页游标等协议问题，抛出 FeishuResponseError。
   SDK 在返回前解析非 JSON 错误页失败时也归入此错误，不当作不存在。
 - 网络异常保留 SDK 底层 requests 异常；应用层模型字段不符合契约时保留 Pydantic ValidationError。
-- 全量列表任何页、空间或节点失败即抛出，不返回部分结果；list_blocks 的文档不存在也抛出。
+- 全量列表任何页、空间或节点失败即抛出；列表型方法不返回部分结果，`list_all_space_nodes` 的异步迭代除外
+  （失败前已产出的节点不撤回）。list_blocks 的文档不存在也抛出。
 - 空页且 has_more=True 时继续翻页；缺失或重复游标报错，防止截断或死循环。
 - 导入或移动任务返回非成功状态、或超过轮询上限时抛 FeishuImportError，保留状态码；不输出原始响应内容。
   上传、导入、移动的响应缺少 `file_token`、`ticket`、`token`、`wiki_token/task_id`、`move_result` 等字段时抛 FeishuResponseError。

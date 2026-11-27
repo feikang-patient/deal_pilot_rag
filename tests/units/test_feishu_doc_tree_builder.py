@@ -77,9 +77,7 @@ def test_single_page(parent_id: str | None) -> None:
 
 
 @pytest.mark.parametrize("order", list(permutations(range(3))))
-def test_child_order_comes_from_children_not_input_order(
-    order: tuple[int, ...],
-) -> None:
+def test_child_order_comes_from_children_not_input_order(order: tuple[int, ...]) -> None:
     sources = [
         block("doc", children=["b", "a"], block_type=BlockType.PAGE),
         block("a", "doc"),
@@ -116,14 +114,7 @@ def test_heading_collects_following_content_and_keeps_nested_tables_and_lists() 
 
 @pytest.mark.parametrize("block_type", [BlockType.UNDEFINED, 104])
 def test_known_and_unknown_types_are_preserved(block_type: int) -> None:
-    root = asyncio.run(
-        build_tree(
-            [
-                block("doc", children=["child"], block_type=1),
-                block("child", "doc", block_type=block_type),
-            ]
-        )
-    )
+    root = asyncio.run(build_tree([block("doc", children=["child"], block_type=1), block("child", "doc", block_type=block_type)]))
     child = root.children[0]
     assert child.block_type == block_type
     if block_type == BlockType.UNDEFINED:
@@ -135,15 +126,8 @@ def test_known_and_unknown_types_are_preserved(block_type: int) -> None:
 def test_content_is_extracted_and_payloads_are_empty_and_independent() -> None:
     sources = [
         block("doc", children=["image", "text"], block_type=1),
-        block(
-            "image", "doc", block_type=27, image={"token": "img-token", "width": 120}
-        ),
-        block(
-            "text",
-            "doc",
-            text={"elements": [{"text_run": {"content": "原文"}}]},
-            extension={"values": [1, None]},
-        ),
+        block("image", "doc", block_type=27, image={"token": "img-token", "width": 120}),
+        block("text", "doc", text={"elements": [{"text_run": {"content": "原文"}}]}, extension={"values": [1, None]}),
     ]
     snapshot = [source.model_dump() for source in sources]
     root = asyncio.run(build_tree(sources))
@@ -204,67 +188,26 @@ def test_deep_tree_does_not_require_python_recursion() -> None:
         ([block("a", "b", ["b"]), block("b", "a", ["a"])], "只有一个根节点"),
         ([block("doc", children=["missing"])], "子块 'missing' 不存在"),
         ([block("doc"), block("child", "missing")], "父块 'missing' 不存在"),
-        (
-            [block("doc", children=["child", "child"]), block("child", "doc")],
-            "重复引用",
-        ),
-        (
-            [
-                block("doc", children=["a", "b"]),
-                block("a", "doc", ["child"]),
-                block("b", "doc", ["child"]),
-                block("child", "a"),
-            ],
-            "重复引用",
-        ),
-        (
-            [
-                block("doc", children=["a", "child"]),
-                block("a", "doc"),
-                block("child", "a"),
-            ],
-            "parent_id.*不一致",
-        ),
+        ([block("doc", children=["child", "child"]), block("child", "doc")], "重复引用"),
+        ([block("doc", children=["a", "b"]), block("a", "doc", ["child"]), block("b", "doc", ["child"]), block("child", "a")], "重复引用"),
+        ([block("doc", children=["a", "child"]), block("a", "doc"), block("child", "a")], "parent_id.*不一致"),
         ([block("doc"), block("child", "doc")], "未列在父块.*children 中"),
         ([block("doc", children=["doc"])], "parent_id.*不一致"),
         ([block("doc"), block("a", "a", ["a"])], "存在环"),
         ([block("doc"), block("a", "b", ["b"]), block("b", "a", ["a"])], "存在环"),
     ],
-    ids=[
-        "empty",
-        "empty-id",
-        "blank-id",
-        "duplicate-id",
-        "multiple-roots",
-        "no-root",
-        "missing-child",
-        "missing-parent",
-        "duplicate-child",
-        "multiple-parents",
-        "parent-conflict",
-        "unlisted-child",
-        "root-self-reference",
-        "detached-self-cycle",
-        "detached-cycle",
-    ],
+    ids=["empty", "empty-id", "blank-id", "duplicate-id", "multiple-roots", "no-root", "missing-child", "missing-parent", "duplicate-child", "multiple-parents", "parent-conflict", "unlisted-child", "root-self-reference", "detached-self-cycle", "detached-cycle"],
 )
-def test_invalid_tree_raises_without_modifying_input(
-    sources: list[DocxBlock], message: str
-) -> None:
+def test_invalid_tree_raises_without_modifying_input(sources: list[DocxBlock], message: str) -> None:
     snapshot = [source.model_dump() for source in sources]
     with pytest.raises(ValueError, match=message):
         asyncio.run(build_tree(sources))
     assert [source.model_dump() for source in sources] == snapshot
 
 
-@pytest.mark.parametrize(
-    "image", [None, {}, {"token": None}, {"token": ""}, {"token": "  "}, {"token": 123}]
-)
+@pytest.mark.parametrize("image", [None, {}, {"token": None}, {"token": ""}, {"token": "  "}, {"token": 123}])
 def test_image_requires_valid_token(image: JsonValue) -> None:
-    sources = [
-        block("doc", children=["image"]),
-        block("image", "doc", block_type=27, image=image),
-    ]
+    sources = [block("doc", children=["image"]), block("image", "doc", block_type=27, image=image)]
     with pytest.raises(ValueError, match="图片块 'image'.*image.token"):
         asyncio.run(build_tree(sources))
 
@@ -273,18 +216,9 @@ def test_image_requires_valid_token(image: JsonValue) -> None:
     ("block_type", "field"),
     [(1, "page"), (2, "text")]
     + [(level + 2, f"heading{level}") for level in range(1, 10)]
-    + [
-        (12, "bullet"),
-        (13, "ordered"),
-        (14, "code"),
-        (15, "quote"),
-        (16, "equation"),
-        (17, "todo"),
-    ],
+    + [(12, "bullet"), (13, "ordered"), (14, "code"), (15, "quote"), (16, "equation"), (17, "todo")],
 )
-def test_all_text_block_fields_preserve_order_whitespace_and_newlines(
-    block_type: int, field: str
-) -> None:
+def test_all_text_block_fields_preserve_order_whitespace_and_newlines(block_type: int, field: str) -> None:
     source = block("doc", block_type=block_type)
     source.raw[field] = {
         "elements": [
@@ -301,60 +235,23 @@ def test_all_text_block_fields_preserve_order_whitespace_and_newlines(
 
 
 def test_inline_equation_and_document_or_link_title() -> None:
-    source = block(
-        "doc",
-        text={
-            "elements": [
-                {"text_run": {"content": "参考 "}},
-                {
-                    "mention_doc": {
-                        "title": "文档标题",
-                        "url": "https://example.com/doc",
-                    }
-                },
-                {"text_run": {"content": "："}},
-                {"equation": {"content": "a^2+b^2"}},
-                {
-                    "link_preview": {
-                        "title": "链接标题",
-                        "url": "https://example.com/link",
-                    }
-                },
-                {"mention_doc": {"url": "https://example.com/fallback"}},
-            ]
-        },
-    )
-    assert (
-        asyncio.run(build_tree([source])).content
-        == "参考 文档标题：a^2+b^2链接标题https://example.com/fallback"
-    )
+    source = block("doc", text={"elements": [
+        {"text_run": {"content": "参考 "}},
+        {"mention_doc": {"title": "文档标题", "url": "https://example.com/doc"}},
+        {"text_run": {"content": "："}},
+        {"equation": {"content": "a^2+b^2"}},
+        {"link_preview": {"title": "链接标题", "url": "https://example.com/link"}},
+        {"mention_doc": {"url": "https://example.com/fallback"}},
+    ]})
+    assert asyncio.run(build_tree([source])).content == "参考 文档标题：a^2+b^2链接标题https://example.com/fallback"
 
 
 def test_container_content_does_not_repeat_child_text() -> None:
-    root = asyncio.run(
-        build_tree(
-            [
-                block(
-                    "doc",
-                    children=["container"],
-                    block_type=1,
-                    page={"elements": [{"text_run": {"content": "标题"}}]},
-                ),
-                block(
-                    "container",
-                    "doc",
-                    ["text"],
-                    block_type=19,
-                    callout={"emoji_id": "pushpin"},
-                ),
-                block(
-                    "text",
-                    "container",
-                    text={"elements": [{"text_run": {"content": "子节点正文"}}]},
-                ),
-            ]
-        )
-    )
+    root = asyncio.run(build_tree([
+        block("doc", children=["container"], block_type=1, page={"elements": [{"text_run": {"content": "标题"}}]}),
+        block("container", "doc", ["text"], block_type=19, callout={"emoji_id": "pushpin"}),
+        block("text", "container", text={"elements": [{"text_run": {"content": "子节点正文"}}]}),
+    ]))
     assert root.content == "标题"
     assert root.children[0].content == ""
     assert root.children[0].children[0].content == "子节点正文"
@@ -368,15 +265,10 @@ def test_container_content_does_not_repeat_child_text() -> None:
         ({"text": {"elements": [None]}}, "行内元素必须包含一个类型字段"),
         ({"text": {"elements": [{"text_run": None}]}}, "text_run 必须为对象"),
         ({"text": {"elements": [{"text_run": {"content": 123}}]}}, "缺少有效文本"),
-        (
-            {"text": {"elements": [{"mention_user": {"user_id": "user"}}]}},
-            "尚不支持的行内元素",
-        ),
+        ({"text": {"elements": [{"mention_user": {"user_id": "user"}}]}}, "尚不支持的行内元素"),
     ],
 )
-def test_invalid_or_unsupported_inline_content_is_not_silently_dropped(
-    data: dict[str, JsonValue], message: str
-) -> None:
+def test_invalid_or_unsupported_inline_content_is_not_silently_dropped(data: dict[str, JsonValue], message: str) -> None:
     source = block("doc")
     source.raw.update(data)
     with pytest.raises(ValueError, match=message):
@@ -384,44 +276,18 @@ def test_invalid_or_unsupported_inline_content_is_not_silently_dropped(
 
 
 def test_heading_sections_handle_peers_backtracking_and_skipped_levels() -> None:
-    ids = [
-        "intro",
-        "h1",
-        "a",
-        "h3",
-        "b",
-        "h2",
-        "c",
-        "h2-peer",
-        "h9",
-        "d",
-        "h1-peer",
-        "e",
-    ]
+    ids = ["intro", "h1", "a", "h3", "b", "h2", "c", "h2-peer", "h9", "d", "h1-peer", "e"]
     levels = {"h1": 1, "h3": 3, "h2": 2, "h2-peer": 2, "h9": 9, "h1-peer": 1}
     sources = [block("doc", children=ids, block_type=1)] + [
-        block(
-            block_id,
-            "doc",
-            block_type=levels[block_id] + 2 if block_id in levels else 2,
-        )
+        block(block_id, "doc", block_type=levels[block_id] + 2 if block_id in levels else 2)
         for block_id in ids
     ]
     snapshot = [source.model_dump() for source in sources]
     root = asyncio.run(build_tree(list(reversed(sources))))
     expected_parents = {
-        "intro": "doc",
-        "h1": "doc",
-        "a": "h1",
-        "h3": "h1",
-        "b": "h3",
-        "h2": "h1",
-        "c": "h2",
-        "h2-peer": "h1",
-        "h9": "h2-peer",
-        "d": "h9",
-        "h1-peer": "doc",
-        "e": "h1-peer",
+        "intro": "doc", "h1": "doc", "a": "h1", "h3": "h1", "b": "h3",
+        "h2": "h1", "c": "h2", "h2-peer": "h1", "h9": "h2-peer", "d": "h9",
+        "h1-peer": "doc", "e": "h1-peer",
     }
     reading_order = []
     pending = list(reversed(root.children))
@@ -438,37 +304,29 @@ def test_heading_sections_handle_peers_backtracking_and_skipped_levels() -> None
 
 @pytest.mark.parametrize("level", range(1, 10))
 def test_initial_heading_at_any_level_needs_no_synthetic_parent(level: int) -> None:
-    root = asyncio.run(
-        build_tree(
-            [
-                block("doc", children=["heading", "body"], block_type=1),
-                block("heading", "doc", block_type=level + 2),
-                block("body", "doc"),
-            ]
-        )
-    )
+    root = asyncio.run(build_tree([
+        block("doc", children=["heading", "body"], block_type=1),
+        block("heading", "doc", block_type=level + 2),
+        block("body", "doc"),
+    ]))
     assert [node.block_id for node in root.children] == ["heading"]
     assert root.children[0].children[0].block_id == "body"
     assert_links(root, 3)
 
 
 def test_heading_scopes_do_not_cross_container_or_table_cell_boundaries() -> None:
-    root = asyncio.run(
-        build_tree(
-            [
-                block("doc", children=["h1", "table", "outside", "peer"], block_type=1),
-                block("h1", "doc", block_type=3),
-                block("table", "doc", ["cell1", "cell2"], block_type=31),
-                block("cell1", "table", ["cell-heading", "cell-body"], block_type=32),
-                block("cell-heading", "cell1", block_type=3),
-                block("cell-body", "cell1"),
-                block("cell2", "table", ["second-body"], block_type=32),
-                block("second-body", "cell2"),
-                block("outside", "doc"),
-                block("peer", "doc", block_type=3),
-            ]
-        )
-    )
+    root = asyncio.run(build_tree([
+        block("doc", children=["h1", "table", "outside", "peer"], block_type=1),
+        block("h1", "doc", block_type=3),
+        block("table", "doc", ["cell1", "cell2"], block_type=31),
+        block("cell1", "table", ["cell-heading", "cell-body"], block_type=32),
+        block("cell-heading", "cell1", block_type=3),
+        block("cell-body", "cell1"),
+        block("cell2", "table", ["second-body"], block_type=32),
+        block("second-body", "cell2"),
+        block("outside", "doc"),
+        block("peer", "doc", block_type=3),
+    ]))
     heading, peer = root.children
     table, outside = heading.children
     first, second = table.children
@@ -481,33 +339,22 @@ def test_heading_scopes_do_not_cross_container_or_table_cell_boundaries() -> Non
 
 
 def test_heading_existing_children_come_before_absorbed_following_siblings() -> None:
-    root = asyncio.run(
-        build_tree(
-            [
-                block("doc", children=["h1", "following"], block_type=1),
-                block("h1", "doc", ["original"], block_type=3),
-                block("original", "h1"),
-                block("following", "doc"),
-            ]
-        )
-    )
-    assert [node.block_id for node in root.children[0].children] == [
-        "original",
-        "following",
-    ]
+    root = asyncio.run(build_tree([
+        block("doc", children=["h1", "following"], block_type=1),
+        block("h1", "doc", ["original"], block_type=3),
+        block("original", "h1"),
+        block("following", "doc"),
+    ]))
+    assert [node.block_id for node in root.children[0].children] == ["original", "following"]
     assert_links(root, 4)
 
 
 @pytest.mark.parametrize("language", [49, 0, 1000])
 def test_code_payload_contains_only_original_language(language: int) -> None:
-    source = block(
-        "doc",
-        block_type=14,
-        code={
-            "elements": [{"text_run": {"content": "a = 1\n"}}],
-            "style": {"language": language, "wrap": True},
-        },
-    )
+    source = block("doc", block_type=14, code={
+        "elements": [{"text_run": {"content": "a = 1\n"}}],
+        "style": {"language": language, "wrap": True},
+    })
     before = source.model_dump()
     root = asyncio.run(build_tree([source]))
     assert root.payload == {"language": language}
@@ -522,36 +369,25 @@ def test_code_payload_contains_only_original_language(language: int) -> None:
 
 @pytest.mark.parametrize("style", [{}, {"language": None}])
 def test_missing_code_language_is_not_invented(style: dict[str, JsonValue]) -> None:
-    assert (
-        asyncio.run(
-            build_tree([block("doc", block_type=14, code={"style": style})])
-        ).payload
-        == {}
-    )
+    assert asyncio.run(build_tree([block("doc", block_type=14, code={"style": style})])).payload == {}
 
 
-@pytest.mark.parametrize(
-    "style", [None, "wrong", {"language": "python"}, {"language": True}]
-)
+@pytest.mark.parametrize("style", [None, "wrong", {"language": "python"}, {"language": True}])
 def test_invalid_code_language_structure_raises(style: JsonValue) -> None:
     with pytest.raises(ValueError, match="code.style"):
         asyncio.run(build_tree([block("doc", block_type=14, code={"style": style})]))
 
 
 def test_table_payload_keeps_only_selected_properties_without_mutating_source() -> None:
-    source = block(
-        "table",
-        block_type=31,
-        table={
-            "cells": [],
-            "property": {
-                "column_size": 3,
-                "row_size": 3,
-                "column_width": [100, 100, 100],
-                "merge_info": [{"col_span": 1, "row_span": 1} for _ in range(9)],
-            },
+    source = block("table", block_type=31, table={
+        "cells": [],
+        "property": {
+            "column_size": 3,
+            "row_size": 3,
+            "column_width": [100, 100, 100],
+            "merge_info": [{"col_span": 1, "row_span": 1} for _ in range(9)],
         },
-    )
+    })
     before = source.model_dump()
     node = asyncio.run(build_tree([source]))
     assert node.payload == {
@@ -565,22 +401,18 @@ def test_table_payload_keeps_only_selected_properties_without_mutating_source() 
 
 
 def test_table_merge_info_is_copied_without_rewriting_spans_or_order() -> None:
-    source = block(
-        "table",
-        block_type=31,
-        table={
-            "property": {
-                "column_size": 2,
-                "row_size": 2,
-                "merge_info": [
-                    {"col_span": 2, "row_span": 1},
-                    {"col_span": 1, "row_span": 1},
-                    {"col_span": 1, "row_span": 1},
-                    {"col_span": 1, "row_span": 1},
-                ],
-            },
+    source = block("table", block_type=31, table={
+        "property": {
+            "column_size": 2,
+            "row_size": 2,
+            "merge_info": [
+                {"col_span": 2, "row_span": 1},
+                {"col_span": 1, "row_span": 1},
+                {"col_span": 1, "row_span": 1},
+                {"col_span": 1, "row_span": 1},
+            ],
         },
-    )
+    })
     before = source.model_dump()
     first = asyncio.run(build_tree([source]))
     second = asyncio.run(build_tree([source]))
@@ -601,9 +433,7 @@ def test_table_merge_info_is_copied_without_rewriting_spans_or_order() -> None:
 
 
 @pytest.mark.parametrize("properties", [{}, {"row_size": 3}, {"merge_info": []}])
-def test_missing_table_properties_are_not_invented(
-    properties: dict[str, JsonValue],
-) -> None:
+def test_missing_table_properties_are_not_invented(properties: dict[str, JsonValue]) -> None:
     source = block("table", block_type=31, table={"property": properties})
     assert asyncio.run(build_tree([source])).payload == properties
 
@@ -628,23 +458,15 @@ def test_image_root_is_processed_in_place(mock_image_parser: AsyncMock) -> None:
         node.payload["processed"] = True
 
     mock_image_parser.side_effect = parse
-    root = asyncio.run(
-        build_tree([block("image", block_type=27, image={"token": "root-token"})])
-    )
+    root = asyncio.run(build_tree([block("image", block_type=27, image={"token": "root-token"})]))
     mock_image_parser.assert_awaited_once_with(root)
     assert root.content == "图片内容"
     assert root.payload == {"processed": True}
 
 
-def test_all_images_run_serially_in_document_order_after_complete_tree_is_built(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_all_images_run_serially_in_document_order_after_complete_tree_is_built(monkeypatch: pytest.MonkeyPatch) -> None:
     sources = [
-        block(
-            "doc",
-            children=["heading", "image-a", "table", "image-c", "tail"],
-            block_type=1,
-        ),
+        block("doc", children=["heading", "image-a", "table", "image-c", "tail"], block_type=1),
         block("heading", "doc", block_type=3),
         block("image-a", "doc", block_type=27, image={"token": "token-a"}),
         block("table", "doc", ["cell"], block_type=31),
@@ -667,20 +489,17 @@ def test_all_images_run_serially_in_document_order_after_complete_tree_is_built(
             assert_links(root, len(sources))
             assert root.children[0].block_id == "heading"
             assert [child.block_id for child in root.children[0].children] == [
-                "image-a",
-                "table",
-                "image-c",
-                "tail",
+                "image-a", "table", "image-c", "tail",
             ]
             assert node.block_id not in started
-            assert list(started) == order[: len(started)]
+            assert list(started) == order[:len(started)]
             assert set(started) == finished
             for previous in started.values():
                 assert previous.content == f"processed-{previous.block_id}"
             started[node.block_id] = node
             # 让出控制权后仍只能有当前图片在执行。
             await asyncio.sleep(0)
-            assert list(started) == order[: order.index(node.block_id) + 1]
+            assert list(started) == order[:order.index(node.block_id) + 1]
             token = node.content
             node.content = f"processed-{node.block_id}"
             node.payload.update({"token": token, "processed": True})
@@ -691,62 +510,39 @@ def test_all_images_run_serially_in_document_order_after_complete_tree_is_built(
         assert list(started) == order
         assert set(started) == finished == {"image-a", "image-b", "image-c"}
         heading = root.children[0]
-        images = [
-            heading.children[0],
-            heading.children[1].children[0].children[0],
-            heading.children[2],
-        ]
+        images = [heading.children[0], heading.children[1].children[0].children[0], heading.children[2]]
         for node in images:
             assert node is started[node.block_id]
             assert node.content == f"processed-{node.block_id}"
-            assert node.payload == {
-                "token": f"token-{node.block_id[-1]}",
-                "processed": True,
-            }
+            assert node.payload == {"token": f"token-{node.block_id[-1]}", "processed": True}
         assert_links(root, len(sources))
 
     asyncio.run(scenario())
     assert [source.model_dump() for source in sources] == before
 
 
-@pytest.mark.parametrize(
-    "error", [RuntimeError("图片处理失败"), asyncio.CancelledError()]
-)
-def test_image_parser_errors_and_cancellation_propagate(
-    error: BaseException, mock_image_parser: AsyncMock
-) -> None:
+@pytest.mark.parametrize("error", [RuntimeError("图片处理失败"), asyncio.CancelledError()])
+def test_image_parser_errors_and_cancellation_propagate(error: BaseException, mock_image_parser: AsyncMock) -> None:
     mock_image_parser.side_effect = error
     with pytest.raises(type(error)) as captured:
-        asyncio.run(
-            build_tree([block("image", block_type=27, image={"token": "token"})])
-        )
+        asyncio.run(build_tree([block("image", block_type=27, image={"token": "token"})]))
     assert captured.value is error
     mock_image_parser.assert_awaited_once()
 
 
-@pytest.mark.parametrize(
-    "error", [RuntimeError("图片处理失败"), asyncio.CancelledError()]
-)
-def test_image_failure_stops_before_next_image(
-    error: BaseException, mock_image_parser: AsyncMock
-) -> None:
+@pytest.mark.parametrize("error", [RuntimeError("图片处理失败"), asyncio.CancelledError()])
+def test_image_failure_stops_before_next_image(error: BaseException, mock_image_parser: AsyncMock) -> None:
     mock_image_parser.side_effect = error
     with pytest.raises(type(error)):
-        asyncio.run(
-            build_tree(
-                [
-                    block("doc", children=["a", "b"]),
-                    block("a", "doc", block_type=27, image={"token": "a"}),
-                    block("b", "doc", block_type=27, image={"token": "b"}),
-                ]
-            )
-        )
+        asyncio.run(build_tree([
+            block("doc", children=["a", "b"]),
+            block("a", "doc", block_type=27, image={"token": "a"}),
+            block("b", "doc", block_type=27, image={"token": "b"}),
+        ]))
     mock_image_parser.assert_awaited_once()
 
 
-def test_image_parser_is_not_started_when_tree_construction_fails(
-    mock_image_parser: AsyncMock,
-) -> None:
+def test_image_parser_is_not_started_when_tree_construction_fails(mock_image_parser: AsyncMock) -> None:
     sources = [
         block("doc", children=["valid", "invalid"], block_type=1),
         block("valid", "doc", block_type=27, image={"token": "valid-token"}),

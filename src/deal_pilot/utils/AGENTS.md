@@ -22,6 +22,7 @@
 - `utils/__init__.py` 导入 ReasoningChatModel 触发 provider 注册。这依赖 LangChain 的内部集成表，升级依赖时检查兼容性，不能无意移除导入。
 - reasoning 适配同时处理流式与非流式，输出 v1 content blocks；保留正文、工具调用和响应元数据，不把 reasoning 当最终用户答案。
 - 追踪包装从 metadata 读取父 trace/span，从认证 runtime 读取用户，从上下文读取会话；只在 trace_id 和 parent_span_id 同时存在时建立父关联。
+- `trace_wrapper(agent_factory, *, enviroment=None)` 的显式参数优先于 metadata 的 `trace_environment`；参数名按当前实现拼写为 `enviroment`，不要单方面改名。`agents/main.py` 与 `agents/web.py` 当前未传该参数，仍沿用 metadata。
 
 ## 缓存契约
 

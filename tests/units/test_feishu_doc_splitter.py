@@ -22,7 +22,7 @@ def document(
     return Document(id=block_id, page_content="\n\n".join(p for p in (prefix, body) if p), metadata={
         "block_id": block_id, "block_type": {"heading": 3, "page": 1, "image": 27, "code": 14, "table": 31}[kind],
         "kind": kind, "payload": payload or {}, "order": 7,
-        "parent_document_id": "parent", "title_path": path, "references": references or [],
+        "parent_block_id": "parent", "title_path": path, "references": references or [],
         "source": {"tags": ["original"]},
     })
 
@@ -75,7 +75,7 @@ def test_paragraph_boundaries_titles_order_and_stable_ids(kind: str) -> None:
         assert chunk.metadata["chunk_index"] == index
         assert chunk.metadata["chunk_count"] == 3
         assert chunk.metadata["block_id"] == "section"
-        assert chunk.metadata["order"] == 7 and chunk.metadata["parent_document_id"] == "parent"
+        assert chunk.metadata["order"] == 7 and chunk.metadata["parent_block_id"] == "parent"
         assert chunk.page_content.startswith("# 页面\n\n## 章节\n\n")
     assert chunks == split_feishu_doc([source], chunk_size=45, chunk_overlap=0)
 
@@ -271,10 +271,10 @@ def test_loader_to_splitter_preserves_source_relations_without_original_document
         by_block.setdefault(chunk.metadata["block_id"], []).append(chunk)
         assert chunk.metadata["tenant"] == "test"
     assert len(by_block["heading"]) > 1 and len(by_block["table"]) == 2
-    assert by_block["image"][0].metadata["parent_document_id"] == "table"
+    assert by_block["image"][0].metadata["parent_block_id"] == "table"
     assert by_block["image"][0].id == "image"
     for chunk in chunks:
         for ref in chunk.metadata["references"]:
             targets = by_block[ref["id"]]
             assert ref["placeholder"] in chunk.page_content
-            assert all(target.metadata["parent_document_id"] == chunk.metadata["block_id"] for target in targets)
+            assert all(target.metadata["parent_block_id"] == chunk.metadata["block_id"] for target in targets)
